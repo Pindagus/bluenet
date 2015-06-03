@@ -29,12 +29,17 @@ dirs+=("/opt/gcc-arm-none-eabi-4_8-2014q3/arm-none-eabi/include/c++/4.8.4/arm-no
 # only include header files, source files are not considered
 files=()
 files+=("$rel_path/include/cs_nRF51822.h")
-files+=("$rel_path/include/cs_iBeacon.h")
+#files+=("$rel_path/include/cs_iBeacon.h") does not compile
 files+=("$rel_path/include/cs_BluetoothLE.h")
-files+=("$rel_path/include/cs_Serializable.h")
+files+=("$rel_path/include/common/cs_Boards.h")
+files+=("$rel_path/include/common/cs_Config.h")
+files+=("$rel_path/include/common/cs_Storage.h")
+#files+=("$rel_path/include/common/cs_DifferentialBuffer.h") does not compile
+files+=("$rel_path/include/common/cs_Timer.h")
 files+=("$rel_path/include/services/cs_GeneralService.h")
 files+=("$rel_path/include/services/cs_PowerService.h")
 files+=("$rel_path/include/services/cs_IndoorLocalisationService.h")
+files+=("$rel_path/include/characteristics/cs_ScanResult.h")
 files+=("$rel_path/include/drivers/cs_PWM.h")
 files+=("$rel_path/include/drivers/cs_ADC.h")
 files+=("$rel_path/include/drivers/cs_Serial.h")
@@ -64,12 +69,13 @@ macros+=("-DCOMPILATION_TIME=${COMPILATION_TIME}")
 macros+=("-DBOARD=${BOARD}")
 macros+=("-DHARDWARE_VERSION=${HARDWARE_VERSION}")
 macros+=("-DSERIAL_VERBOSITY=${SERIAL_VERBOSITY}")
+macros+=("-DTICK_CONTINUOUSLY=${TICK_CONTINUOUSLY}")
 
 # Add services
 macros+=("-DINDOOR_SERVICE=${INDOOR_SERVICE}")
 macros+=("-DGENERAL_SERVICE=${GENERAL_SERVICE}")
 macros+=("-DPOWER_SERVICE=${POWER_SERVICE}")
-macros+=("-DMESHING=${MESHING}")
+macros+=("-DCHAR_MESHING=${CHAR_MESHING}")
 
 # only required if Nordic files are used
 macros+=("-DBOARD_NRF6310")

@@ -35,9 +35,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifndef _TRICKLE_H__
 #define _TRICKLE_H__
-#include <stdint.h>
 #include "nrf51.h"
-#include "app_timer.h"
+#include <stdint.h>
+#include <stdbool.h>
 /**
 * @file Implementation of Trickle algorithm described in IETF RFC6206
 *   http://tools.ietf.org/html/rfc6206
@@ -57,14 +57,14 @@ typedef struct
 } trickle_t;
 
 
-/** 
+/**
 * @brief Setup the algorithm. Is only called once, and before all other trickle
 *   related functions.
 */
 void trickle_setup(uint32_t i_min, uint32_t i_max, uint8_t k);
 
-/** 
-* @brief increment global trickle timestamp by one 
+/**
+* @brief increment global trickle timestamp by one
 */
 void trickle_time_increment(void);
 
@@ -74,7 +74,7 @@ void trickle_time_increment(void);
 void trickle_time_update(uint32_t time);
 
 /**
-* @brief initialize a trickle algorithm instance. Prepares all flags and 
+* @brief initialize a trickle algorithm instance. Prepares all flags and
 *   values used for book keeping
 */
 void trickle_init(trickle_t* trickle);
@@ -102,9 +102,9 @@ void trickle_timer_reset(trickle_t* trickle);
 void trickle_register_tx(trickle_t* trickle);
 
 /**
-* @brief Check timeouts and check whether a TX on the trickle instance is 
+* @brief Check timeouts and check whether a TX on the trickle instance is
 *   necessary.
-* 
+*
 * @param[in] trickle pointer to trickle algorithm instance object.
 * @param[out] out_do_tx returns whether the trickle instance is due for a TX
 */

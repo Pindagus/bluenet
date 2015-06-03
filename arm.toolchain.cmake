@@ -1,5 +1,5 @@
 #######################################################################################################################
-# The build systems uses CMake. All the automatically generated code falls under the Lesser General Public License 
+# The build systems uses CMake. All the automatically generated code falls under the Lesser General Public License
 # (LGPL GNU v3), the Apache License, or the MIT license, your choice.
 #
 # Author:	 Anne C. van Rossum (Distributed Organisms B.V.)
@@ -24,7 +24,7 @@ INCLUDE(${CONFIG_FILE})
 
 UNSET(CMAKE_TRY_COMPILE_CONFIGURATION)
 
-# type of compiler we want to use 
+# type of compiler we want to use
 SET(COMPILER_TYPE_PREFIX ${COMPILER_TYPE}-)
 
 # The extension .obj is just ugly, set it back to .o (does not work)
@@ -55,22 +55,29 @@ SET(CMAKE_C_FLAGS                                "-std=gnu99"                   
 SET(CMAKE_SHARED_LINKER_FLAGS                    ""                                              CACHE STRING "shared linker flags")
 SET(CMAKE_MODULE_LINKER_FLAGS                    ""                                              CACHE STRING "module linker flags")
 SET(CMAKE_EXE_LINKER_FLAGS                       "-Wl,-z,nocopyreloc"                            CACHE STRING "executable linker flags")
-SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS            "") 
-SET(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS          "") 
+SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS            "")
+SET(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS          "")
 
 # Collect flags that have to do with optimization, optimize for size for now
 #SET(FLAG_MATH "-ffast-math")
 #SET(FLAG_LINK_TIME_OPTIMIZATION "-flto")
 SET(OPTIMIZE "-Os -fomit-frame-pointer ${FLAG_MATH} ${FLAG_LINK_TIME_OPTIMIZATION}")
+#SET(OPTIMIZE "-O3 -fomit-frame-pointer ${FLAG_MATH} ${FLAG_LINK_TIME_OPTIMIZATION}")
 
 # Collect flags that are used in the code, as macros
 #ADD_DEFINITIONS("-MMD -DNRF51 -DEPD_ENABLE_EXTRA_RAM -DARDUINO=100 -DE_STICKY_v1 -DNRF51_USE_SOFTDEVICE=${NRF51_USE_SOFTDEVICE} -DUSE_RENDER_CONTEXT -DSYSCALLS -DUSING_FUNC")
 ADD_DEFINITIONS("-MMD -DNRF51 -DEPD_ENABLE_EXTRA_RAM -DNRF51_USE_SOFTDEVICE=${NRF51_USE_SOFTDEVICE} -DUSE_RENDER_CONTEXT -DSYSCALLS -DUSING_FUNC")
 
+LIST(APPEND CUSTOM_DEFINITIONS, TEMPERATURE)
+
+ADD_DEFINITIONS("-DBLE_STACK_SUPPORT_REQD")
+
 # Pass variables in defined in the configuration file to the compiler
 ADD_DEFINITIONS("-DNRF51822_DIR=${NRF51822_DIR}")
 ADD_DEFINITIONS("-DNORDIC_SDK_VERSION=${NORDIC_SDK_VERSION}")
 ADD_DEFINITIONS("-DSOFTDEVICE_SERIES=${SOFTDEVICE_SERIES}")
+ADD_DEFINITIONS("-DSOFTDEVICE_MAJOR=${SOFTDEVICE_MAJOR}")
+ADD_DEFINITIONS("-DSOFTDEVICE_MINOR=${SOFTDEVICE_MINOR}")
 ADD_DEFINITIONS("-DSOFTDEVICE=${SOFTDEVICE}")
 ADD_DEFINITIONS("-DSOFTDEVICE_NO_SEPARATE_UICR_SECTION=${SOFTDEVICE_NO_SEPARATE_UICR_SECTION}")
 ADD_DEFINITIONS("-DAPPLICATION_START_ADDRESS=${APPLICATION_START_ADDRESS}")
@@ -79,13 +86,33 @@ ADD_DEFINITIONS("-DCOMPILATION_TIME=${COMPILATION_TIME}")
 ADD_DEFINITIONS("-DBOARD=${BOARD}")
 ADD_DEFINITIONS("-DHARDWARE_VERSION=${HARDWARE_VERSION}")
 ADD_DEFINITIONS("-DSERIAL_VERBOSITY=${SERIAL_VERBOSITY}")
+ADD_DEFINITIONS("-DMASTER_BUFFER_SIZE=${MASTER_BUFFER_SIZE}")
+ADD_DEFINITIONS("-DDEFAULT_ON=${DEFAULT_ON}")
 
+ADD_DEFINITIONS("-DIBEACON=${IBEACON}")
+IF(IBEACON)
+ADD_DEFINITIONS("-DBEACON_UUID=${BEACON_UUID}")
+ADD_DEFINITIONS("-DBEACON_MAJOR=${BEACON_MAJOR}")
+ADD_DEFINITIONS("-DBEACON_MINOR=${BEACON_MINOR}")
+ADD_DEFINITIONS("-DBEACON_RSSI=${BEACON_RSSI}")
+ENDIF()
 
 # Add services
 ADD_DEFINITIONS("-DINDOOR_SERVICE=${INDOOR_SERVICE}")
 ADD_DEFINITIONS("-DGENERAL_SERVICE=${GENERAL_SERVICE}")
 ADD_DEFINITIONS("-DPOWER_SERVICE=${POWER_SERVICE}")
-ADD_DEFINITIONS("-DMESHING=${MESHING}")
+
+# Add characteristics
+ADD_DEFINITIONS("-DCHAR_MESHING=${CHAR_MESHING}")
+ADD_DEFINITIONS("-DCHAR_TEMPERATURE=${CHAR_TEMPERATURE}")
+ADD_DEFINITIONS("-DCHAR_RESET=${CHAR_RESET}")
+ADD_DEFINITIONS("-DCHAR_CONFIGURATION=${CHAR_CONFIGURATION}")
+ADD_DEFINITIONS("-DCHAR_PWM=${CHAR_PWM}")
+ADD_DEFINITIONS("-DCHAR_SAMPLE_CURRENT=${CHAR_SAMPLE_CURRENT}")
+ADD_DEFINITIONS("-DCHAR_CURRENT_LIMIT=${CHAR_CURRENT_LIMIT}")
+ADD_DEFINITIONS("-DCHAR_RSSI=${CHAR_RSSI}")
+ADD_DEFINITIONS("-DCHAR_SCAN_DEVICES=${CHAR_SCAN_DEVICES}")
+ADD_DEFINITIONS("-DCHAR_TRACK_DEVICES=${CHAR_TRACK_DEVICES}")
 
 # only required if Nordic files are used
 ADD_DEFINITIONS("-DBOARD_NRF6310")
@@ -101,6 +128,11 @@ GET_DIRECTORY_PROPERTY( DirDefs DIRECTORY ${CMAKE_SOURCE_DIR} COMPILE_DEFINITION
 
 FOREACH(definition ${DirDefs})
 	MESSAGE(STATUS "Definition: " ${definition})
+	IF(${definition} MATCHES "=$")
+		IF(NOT ${definition} MATCHES "COMPILATION_TIME")
+			MESSAGE(FATAL_ERROR "Definition ${definition} is not defined" )
+		ENDIF()
+	ENDIF()
 ENDFOREACH()
 
 # Set the compiler flags
@@ -108,8 +140,8 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3 -Wall ${OPTIMIZE} -mcpu=cortex-m0 -m
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3 -Wall ${OPTIMIZE} -mcpu=cortex-m0 -mthumb -ffunction-sections -fdata-sections ${DEFINES}")
 
 # Tell the linker that we use a special memory layout
-SET(FILE_MEMORY_LAYOUT "-TnRF51822-softdevice.ld") 
-SET(PATH_FILE_MEMORY "-L${PROJECT_SOURCE_DIR}/conf") 
+SET(FILE_MEMORY_LAYOUT "-TnRF51822-softdevice.ld")
+SET(PATH_FILE_MEMORY "-L${PROJECT_SOURCE_DIR}/conf")
 
 # http://public.kitware.com/Bug/view.php?id=12652
 # CMake does send the compiler flags also to the linker
@@ -144,7 +176,7 @@ SET(CMAKE_INCLUDE_PATH ${DESTDIR}/usr/local/include)
 MESSAGE(STATUS "Add include path: ${CMAKE_INCLUDE_PATH}")
 
 # indicate where the linker is allowed to search for library / headers
-SET(CMAKE_FIND_ROOT_PATH 
+SET(CMAKE_FIND_ROOT_PATH
 	#${ARM_LINUX_SYSROOT}
 	${DESTDIR})
 #SET(CMAKE_FIND_ROOT_PATH ${CMAKE_FIND_ROOT_PATH} ${ARM_LINUX_SYSROOT})

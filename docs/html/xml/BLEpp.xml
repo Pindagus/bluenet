@@ -1,11 +1,16 @@
 <?xml version='1.0' encoding='utf-8'?>
 <namespace id="BLEpp" name="BLEpp" xmlns="http://jessevdk.github.com/cldoc/1.0">
+  <brief> General BLE name service</brief>
+  <doc>All functionality that is just general BLE functionality is encapsulated in the BLEpp namespace.
+</doc>
   <functiontemplate id="BLEpp::ble_type" name="ble_type">
-    <brief>The default ble_type</brief>
+    <brief> The templated version of ble_type</brief>
     <return>
       <type name="uint8_t" />
     </return>
-    <templatetypeparameter id="BLEpp::ble_type::T" name="T" />
+    <templatetypeparameter id="BLEpp::ble_type::T" name="T">
+      <brief>The class / primitive to template ble_type with</brief>
+    </templatetypeparameter>
   </functiontemplate>
   <class name="BatteryService" ref="BLEpp::BatteryService#BLEpp::BatteryService">
     <brief> Battery service</brief>
@@ -14,31 +19,31 @@
     <brief> BLEStack defines a chip-agnostic Bluetooth Low-Energy stack</brief>
   </class>
   <classtemplate name="Characteristic" ref="BLEpp::Characteristic#BLEpp::Characteristic">
-    <brief> Characteristic of generic type T</brief>
-    <templatetypeparameter id="BLEpp::Characteristic::T" name="T" />
+    <brief> A default characteristic</brief>
+    <templatetypeparameter id="BLEpp::Characteristic::T" name="T">
+      <brief>type of the value</brief>
+    </templatetypeparameter>
+    <templatetypeparameter id="BLEpp::Characteristic::E" name="E">
+      <brief>default type (subdefined for example for built-in types)</brief>
+    </templatetypeparameter>
   </classtemplate>
+  <class name="Characteristic" ref="BLEpp::Characteristic#BLEpp::Characteristic">
+    <brief>A characteristic for strings</brief>
+  </class>
   <class name="CharacteristicBase" ref="BLEpp::CharacteristicBase#BLEpp::CharacteristicBase">
     <brief> Non-template base class for Characteristics.</brief>
   </class>
-  <struct name="CharacteristicInit" ref="BLEpp::CharacteristicInit#BLEpp::CharacteristicInit" />
-  <struct name="CharacteristicStatus" ref="BLEpp::CharacteristicStatus#BLEpp::CharacteristicStatus" />
-  <classtemplate name="CharacteristicT" ref="BLEpp::CharacteristicT#BLEpp::CharacteristicT">
-    <brief> A default characteristic</brief>
-    <templatetypeparameter id="BLEpp::CharacteristicT::T" name="T" />
-    <templatetypeparameter id="BLEpp::CharacteristicT::E" name="E" />
+  <classtemplate name="CharacteristicGeneric" ref="BLEpp::CharacteristicGeneric#BLEpp::CharacteristicGeneric">
+    <brief> Characteristic of generic type T</brief>
+    <templatetypeparameter id="BLEpp::CharacteristicGeneric::T" name="T">
+      <brief>Generic type T</brief>
+    </templatetypeparameter>
   </classtemplate>
-  <class name="CharacteristicT" ref="BLEpp::CharacteristicT#BLEpp::CharacteristicT">
-    <brief>A characteristic for strings</brief>
-  </class>
-  <class name="CharacteristicT" ref="BLEpp::CharacteristicT#BLEpp::CharacteristicT">
-    <brief>A characteristic for CharacteristicValue</brief>
-  </class>
-  <struct name="CharacteristicValue" ref="BLEpp::CharacteristicValue#BLEpp::CharacteristicValue">
-    <brief> A value which can be written to or read from a characteristic </brief>
+  <struct name="CharacteristicInit" ref="BLEpp::CharacteristicInit#BLEpp::CharacteristicInit">
+    <brief> CharacteristicInit collects fields required to define a BLE characteristic</brief>
   </struct>
-  <class name="GenericService" ref="BLEpp::GenericService#BLEpp::GenericService" />
-  <class name="IBeacon" ref="BLEpp::IBeacon#BLEpp::IBeacon">
-    <brief> Implementation of the iBeacon specification.</brief>
+  <class name="GenericService" ref="BLEpp::GenericService#BLEpp::GenericService">
+    <brief> Generic Service is a <ref ref="BLEpp::Service#BLEpp::Service">BLEpp::Service</ref> and <ref ref="BLEpp::Service#BLEpp::Service::Service">BLEpp::Service::Service</ref> with characteristics</brief>
   </class>
   <class name="Nrf51822BluetoothStack" ref="BLEpp::Nrf51822BluetoothStack#BLEpp::Nrf51822BluetoothStack">
     <brief> nRF51822 specific implementation of the BLEStack</brief>
@@ -46,15 +51,6 @@
   <class name="Service" ref="BLEpp::Service#BLEpp::Service">
     <brief> Service as defined in the GATT Specification.</brief>
   </class>
-  <class name="UUID" ref="BLEpp::UUID#BLEpp::UUID">
-    <brief> A Universally Unique IDentifier. </brief>
-  </class>
-  <typedef id="BLEpp::addCharacteristicFunc" name="addCharacteristicFunc">
-    <type name="void (BLEpp::GenericService::*)()" />
-  </typedef>
-  <typedef id="BLEpp::CharacteristicStatusT" name="CharacteristicStatusT">
-    <type name="CharacteristicStatus" ref="BLEpp::CharacteristicStatus#BLEpp::CharacteristicStatus" />
-  </typedef>
   <function id="BLEpp::ble_type" name="ble_type">
     <brief>A ble_type for strings</brief>
     <return>
@@ -62,47 +58,55 @@
     </return>
   </function>
   <function id="BLEpp::ble_type" name="ble_type">
-    <brief>A ble_type for 8-bit unsigned chars</brief>
+    <brief>A ble_type for 8-bit unsigned values</brief>
     <return>
       <type name="uint8_t" />
     </return>
   </function>
   <function id="BLEpp::ble_type" name="ble_type">
+    <brief>A ble_type for 16-bit unsigned values</brief>
     <return>
       <type name="uint8_t" />
     </return>
   </function>
   <function id="BLEpp::ble_type" name="ble_type">
+    <brief>A ble_type for 32-bit unsigned values</brief>
     <return>
       <type name="uint8_t" />
     </return>
   </function>
   <function id="BLEpp::ble_type" name="ble_type">
+    <brief>A ble_type for 8-bit signed values</brief>
     <return>
       <type name="uint8_t" />
     </return>
   </function>
   <function id="BLEpp::ble_type" name="ble_type">
+    <brief>A ble_type for 16-bit signed values</brief>
     <return>
       <type name="uint8_t" />
     </return>
   </function>
   <function id="BLEpp::ble_type" name="ble_type">
+    <brief>A ble_type for 32-bit signed values</brief>
     <return>
       <type name="uint8_t" />
     </return>
   </function>
   <function id="BLEpp::ble_type" name="ble_type">
+    <brief>A ble_type for floats (32 bits)</brief>
     <return>
       <type name="uint8_t" />
     </return>
   </function>
   <function id="BLEpp::ble_type" name="ble_type">
+    <brief>A ble_type for doubles (64 bits)</brief>
     <return>
       <type name="uint8_t" />
     </return>
   </function>
   <function id="BLEpp::ble_type" name="ble_type">
+    <brief>A ble_type for booleans (8 bits)</brief>
     <return>
       <type name="uint8_t" />
     </return>

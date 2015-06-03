@@ -6,12 +6,14 @@
  */
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
-#include "events/cs_Dispatcher.h"
-#include "cs_PWM.h"
+//#include <stdint.h>
+//
+//#include <common/cs_Types.h>
+//#include "cs_PWM.h"
 
-class LPComp: public Dispatcher {
+class LPComp {
 	public:
 		// use static variant of singleton, no dynamic memory allocation
 		static LPComp& getInstance() {
@@ -30,13 +32,8 @@ class LPComp: public Dispatcher {
 		void start();
 		void stop();
 
-		Event_t getLastEvent() { return _lastEvent; }
-
 		// function to be called from interrupt, do not do much there!
-		void update(Event_t event);
-
-		// each program tick, we have time to dispatch events e.g.
-		void tick();
+		void interrupt();
 
 	protected:
 
@@ -46,5 +43,4 @@ class LPComp: public Dispatcher {
 		void operator=(LPComp const &); // singleton, deny implementation
 		~LPComp();
 
-		Event_t _lastEvent;
 };

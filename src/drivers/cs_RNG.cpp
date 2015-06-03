@@ -5,18 +5,22 @@
  * License: LGPLv3+, Apache License, or MIT, your choice
  */
 
-#include "nrf_soc.h"
-#include "nrf_sdm.h"
+#include <drivers/cs_RNG.h>
 
-#include "drivers/cs_RNG.h"
+#include <ble/cs_Nordic.h>
+#include <util/cs_BleError.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-	#include "app_error.h"
-#ifdef __cplusplus
-}
-#endif
+//#include "nrf_soc.h"
+//#include "nrf_sdm.h"
+//
+//
+//#ifdef __cplusplus
+//extern "C" {
+//#endif
+//	#include "app_error.h"
+//#ifdef __cplusplus
+//}
+//#endif
 
 // convert uint8_t to uint32_t
 typedef union {

@@ -44,22 +44,22 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 
 #ifdef BOARD_PCA10000
-    #define TICK_PIN(x) 
-    #define SET_PIN(x) 
-    #define CLEAR_PIN(x) 
+    #define TICK_PIN(x)
+    #define SET_PIN(x)
+    #define CLEAR_PIN(x)
 #else
     #if RBC_MESH_DEBUG
         #define TICK_PIN(x) NRF_GPIO->OUTSET = (1 << (x)); \
-                                                        asm("nop");\
-                                                        asm("nop");\
+                                                        __nop();\
+                                                        __nop();\
                                                         NRF_GPIO->OUTCLR = (1 << (x))
-         
+
         #define SET_PIN(x) NRF_GPIO->OUTSET = (1 << (x))
         #define CLEAR_PIN(x) NRF_GPIO->OUTCLR = (1 << (x))
     #else
-        #define TICK_PIN(x) 
-        #define SET_PIN(x) 
-        #define CLEAR_PIN(x) 
+        #define TICK_PIN(x)
+        #define SET_PIN(x)
+        #define CLEAR_PIN(x)
     #endif
 #endif
 
@@ -84,6 +84,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define DEBUG_RADIO         (0)
 
+//TODO: match these pins to appropriate leds for the board used.
 #define PIN_RADIO_STATE_RX  (14)
 #define PIN_RADIO_STATE_TX  (13)
 #define PIN_RADIO_STATE_IDLE (12)
@@ -103,7 +104,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #if RBC_MESH_DEBUG
     #define PIN_OUT(val,bitcount)      for (uint8_t i = 0; i < (bitcount); ++i){ if (((val) >> ((bitcount) - 1 - i) & 0x01)) { TICK_PIN(PIN_BIT_H); } else { TICK_PIN(PIN_BIT_L); } }
 #else
-    #define PIN_OUT(val,bitcount)   
+    #define PIN_OUT(val,bitcount)
 #endif
 
 #endif /* _RBC_MESH_COMMON_H__ */

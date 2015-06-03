@@ -5,190 +5,350 @@
  * License: LGPLv3+, Apache License, or MIT, your choice
  */
 
-
-//#include <cmath> // try not to use this!
-#include <cstdio>
-
-#include "common/cs_Boards.h"
-#include "common/cs_Config.h"
-#include "cs_nRF51822.h"
-#include "drivers/cs_ADC.h"
-#include "drivers/cs_RTC.h"
 #include "services/cs_IndoorLocalisationService.h"
 
-//#include <common/timer.h>
+//#include <cmath> // try not to use this!
+//#include <cstdio>
+//
+//#include "common/cs_Boards.h"
+//#include "common/cs_Config.h"
+//#include "cs_nRF51822.h"
+//#include "drivers/cs_ADC.h"
+#include "drivers/cs_RTC.h"
+#include "drivers/cs_PWM.h"
+//
+//#include "util/cs_Utils.h"
+//
+#include "structs/buffer/cs_MasterBuffer.h"
+//
+#include "cfg/cs_UuidConfig.h"
+
+#include "drivers/cs_Timer.h"
+
+#include <cfg/cs_Settings.h>
+
+//#include <common/cs_Strings.h>
 
 using namespace BLEpp;
 
-IndoorLocalizationService::IndoorLocalizationService(Nrf51822BluetoothStack& _stack) :
-		_stack(&_stack),
-		_rssiCharac(NULL), _peripheralCharac(NULL), _scanResult(NULL) {
+IndoorLocalizationService::IndoorLocalizationService() :
+		_rssiCharac(NULL), _peripheralCharac(NULL),
+		_trackedDeviceListCharac(NULL), _trackedDeviceCharac(NULL), _trackIsNearby(false),
+		_initialized(false), _scanMode(false),
+//		_scanResult(NULL),
+		_trackedDeviceList(NULL)
+{
 
 	setUUID(UUID(INDOORLOCALISATION_UUID));
-	//setUUID(UUID(0x3800)); // there is no BLE_UUID for indoor localization (yet)
 
 	// we have to figure out why this goes wrong
-	setName(std::string("IndoorLocalizationService"));
+	setName(BLE_SERVICE_INDOOR_LOCALIZATION);
 	
-	characStatus.reserve(5);
-
-	characStatus.push_back( { "Received signal level",
-		RSSI_UUID,
-		false,
-		static_cast<addCharacteristicFunc>(&IndoorLocalizationService::addSignalStrengthCharacteristic)});
-	characStatus.push_back( { "Start/Stop Scan",
-		SCAN_DEVICE_UUID,
-		false,
-		static_cast<addCharacteristicFunc>(&IndoorLocalizationService::addScanControlCharacteristic)});
-	characStatus.push_back( { "Peripherals",
-		LIST_DEVICE_UUID,
-		false,
-		static_cast<addCharacteristicFunc>(&IndoorLocalizationService::addPeripheralListCharacteristic)});
-	characStatus.push_back( { "List tracked devices",
-		TRACKED_DEVICE_LIST_UUID,
-		true,
-		static_cast<addCharacteristicFunc>(&IndoorLocalizationService::addTrackedDeviceListCharacteristic)});
-	characStatus.push_back( { "Add tracked device",
-		TRACKED_DEVICE_UUID,
-		true,
-		static_cast<addCharacteristicFunc>(&IndoorLocalizationService::addTrackedDeviceCharacteristic)});
-
 	_trackMode = false;
 //	// set timer with compare interrupt every 10ms
 //	timer_config(10);
+
+	Storage::getInstance().getHandle(PS_ID_INDOORLOCALISATION_SERVICE, _storageHandle);
+	loadPersistentStorage();
+
+	init();
+
+	Timer::getInstance().createSingleShot(_appTimerId, (app_timer_timeout_handler_t)IndoorLocalizationService::staticTick);
+}
+
+void IndoorLocalizationService::init() {
+	LOGi("Create indoor localization service");
+
+#if CHAR_RSSI==1
+	LOGi("add Signal Strength characteristics");
+	addSignalStrengthCharacteristic();
+#else
+	LOGi("skip Signal Strength characteristics");
+#endif
+#if CHAR_SCAN_DEVICES==1
+	LOGi("add Scan Devices characteristics");
+	addScanControlCharacteristic();
+	addPeripheralListCharacteristic();
+#else
+	LOGi("skip Scan/Devices characteristics");
+#endif
+#if CHAR_TRACK_DEVICES==1
+	LOGi("add Tracked Device characteristics");
+	addTrackedDeviceListCharacteristic();
+	addTrackedDeviceCharacteristic();
+#else
+	LOGi("skip Tracked Device characteristics");
+#endif
+
 }
 
 void IndoorLocalizationService::tick() {
+//	LOGi("Tack: %d", RTC::now());
+
+	if (!_initialized) {
+		if (_trackedDeviceList != NULL) {
+			readTrackedDevices();
+			if (!_trackedDeviceList->isEmpty()) {
+				startTracking();
+			}
+		}
+		_initialized = true;
+	}
 
 	if (!_trackMode) return;
 
-	// this function checks the counter for each device, if everybody is gone, turn off the light
-	bool alone = false;
+	// This function checks the counter for each device
+	// If no device is nearby, turn off the light
+	bool deviceNearby = false;
 	if (_trackedDeviceList != NULL) {
-		alone = (_trackedDeviceList->isAlone() == TDL_IS_ALONE);
+		deviceNearby = (_trackedDeviceList->isNearby() == TDL_IS_NEARBY);
 	}
 
-	if (alone) {
-		PWM::getInstance().setValue(0, 0);
-	} else {
+	// Change PWM only on change of nearby state
+	if (deviceNearby && !_trackIsNearby) {
 		PWM::getInstance().setValue(0, (uint8_t)-1);
+	} else if (!deviceNearby && _trackIsNearby) {
+		PWM::getInstance().setValue(0, 0);
 	}
+	_trackIsNearby = deviceNearby;
+
+	scheduleNextTick();
+}
+
+void IndoorLocalizationService::scheduleNextTick() {
+	Timer::getInstance().start(_appTimerId, HZ_TO_TICKS(LOCALIZATION_SERVICE_UPDATE_FREQUENCY), this);
+}
+
+void IndoorLocalizationService::loadPersistentStorage() {
+	Storage::getInstance().readStorage(_storageHandle, &_storageStruct, sizeof(_storageStruct));
+}
+
+void IndoorLocalizationService::savePersistentStorage() {
+	Storage::getInstance().writeStorage(_storageHandle, &_storageStruct, sizeof(_storageStruct));
 }
 
 void IndoorLocalizationService::addSignalStrengthCharacteristic() {
 //	LOGd("create characteristic to read signal strength");
-	_rssiCharac = new CharacteristicT<int8_t>();
+	_rssiCharac = new Characteristic<int8_t>();
+	addCharacteristic(_rssiCharac);
+
 	_rssiCharac->setUUID(UUID(getUUID(), RSSI_UUID)); // there is no BLE_UUID for rssi level(?)
-	_rssiCharac->setName(std::string("Received signal level"));
+	_rssiCharac->setName(BLE_CHAR_RSSI);
 	_rssiCharac->setDefaultValue(1);
 	_rssiCharac->setNotifies(true);
-
-	addCharacteristic(_rssiCharac);
 }
 
 void IndoorLocalizationService::addScanControlCharacteristic() {
 	// set scanning option
 //	LOGd("create characteristic to stop/start scan");
-	createCharacteristic<uint8_t>()
-		.setUUID(UUID(getUUID(), SCAN_DEVICE_UUID))
-		.setName("scan")
-		.setDefaultValue(255)
-		.setWritable(true)
-		.onWrite([&](const uint8_t & value) -> void {
+	_scanControlCharac = new Characteristic<uint8_t>();
+	addCharacteristic(_scanControlCharac);
+
+	_scanControlCharac->setUUID(UUID(getUUID(), SCAN_DEVICE_UUID));
+	_scanControlCharac->setName(BLE_CHAR_SCAN);
+	_scanControlCharac->setDefaultValue(255);
+	_scanControlCharac->setWritable(true);
+	_scanControlCharac->onWrite([&](const uint8_t& value) -> void {
+			MasterBuffer& mb = MasterBuffer::getInstance();
 			if(value) {
-				LOGi("crown: start scanning");
-				if (!_stack->isScanning()) {
-					if (_scanResult != NULL) {
-						_scanResult->init();
-					}
-					_stack->startScanning();
+				LOGi("Init scan result");
+				if (!mb.isLocked()) {
+					mb.lock();
+					_scanResult->clear();
+				} else {
+					LOGe("buffer already locked!");
 				}
+
+				if (!getStack()->isScanning()) {
+					getStack()->startScanning();
+				}
+				_scanMode = true;
 			} else {
-				LOGi("crown: stop scanning");
-				if (_stack->isScanning()) {
-					_stack->stopScanning();
-					if (_scanResult != NULL) {
-						*_peripheralCharac = *_scanResult;
-						_scanResult->print();
-					}
+				LOGi("Return scan result");
+				if (mb.isLocked()) {
+					_scanResult->print();
+
+					_peripheralCharac->setDataLength(_scanResult->getDataLength());
+					_peripheralCharac->notify();
+					mb.unlock();
+				} else {
+					LOGe("buffer not locked!");
 				}
+
+				// Only stop scanning if we're not also tracking devices
+				if (getStack()->isScanning() && !_trackMode) {
+					getStack()->stopScanning();
+				}
+				_scanMode = false;
 			}
 		});
 }
 
 void IndoorLocalizationService::addPeripheralListCharacteristic() {
-	// get scan result
 //	LOGd("create characteristic to list found peripherals");
+
 	_scanResult = new ScanResult();
-	_peripheralCharac = createCharacteristicRef<ScanResult>();
+
+	MasterBuffer& mb = MasterBuffer::getInstance();
+	buffer_ptr_t buffer = NULL;
+	uint16_t maxLength = 0;
+	mb.getBuffer(buffer, maxLength);
+	_scanResult->assign(buffer, maxLength);
+
+	_peripheralCharac = new Characteristic<buffer_ptr_t>();
+	addCharacteristic(_peripheralCharac);
+
 	_peripheralCharac->setUUID(UUID(getUUID(), LIST_DEVICE_UUID));
 	_peripheralCharac->setName("Devices");
 	_peripheralCharac->setWritable(false);
 	_peripheralCharac->setNotifies(true);
+
+	_peripheralCharac->setValue(buffer);
+	_peripheralCharac->setMaxLength(_scanResult->getMaxLength());
+	_peripheralCharac->setDataLength(0);
 }
 
 void IndoorLocalizationService::addTrackedDeviceListCharacteristic() {
-	
+
 	_trackedDeviceList = new TrackedDeviceList();
 
-	_trackedDeviceListCharac = createCharacteristicRef<TrackedDeviceList>();
-	_trackedDeviceListCharac->setUUID(UUID(getUUID(), TRACKED_DEVICE_LIST_UUID));
-	_trackedDeviceListCharac->setName("List tracked devices");
-	_trackedDeviceListCharac->setWritable(false);
-	_trackedDeviceListCharac->setNotifies(false);
-	
-	// init before adding!	
+	// we don't want to use the master buffer for the tracked device list
+	// because it needs to be persistent and not be overwritten by data
+	// received over BT
+
+	//	MasterBuffer& mb = MasterBuffer::getInstance();
+	//	buffer_ptr_t buffer = NULL;
+	//	uint16_t maxLength = 0;
+	//	mb.getBuffer(buffer, maxLength);
+
+	// so instead allocate a separate buffer that the tracked device list can use
+	uint16_t size = sizeof(tracked_device_list_t);
+	buffer_ptr_t buffer = (buffer_ptr_t)calloc(size, sizeof(uint8_t));
+
+	_trackedDeviceList->assign(buffer, size);
 	_trackedDeviceList->init();
 
-	// Add a hardcoded address (reversed order) and rssi
-        // [CD 12 B7 B4 3F 8D]
-	//uint8_t addr[BLE_GAP_ADDR_LEN] = { 0x8D, 0x3F, 0xB4, 0xB7, 0x12, 0xCD };
-	//uint8_t addr[BLE_GAP_ADDR_LEN] = { 0xED, 0xA6, 0xD7, 0xCA, 0x4C, 0xC4 };
-	//_trackedDeviceList->add(addr, -95);
+	_trackedDeviceListCharac = new Characteristic<buffer_ptr_t>();
+	addCharacteristic(_trackedDeviceListCharac);
+
+	_trackedDeviceListCharac->setUUID(UUID(getUUID(), TRACKED_DEVICE_LIST_UUID));
+	_trackedDeviceListCharac->setName(BLE_CHAR_TRACK);
+	_trackedDeviceListCharac->setWritable(false);
+	_trackedDeviceListCharac->setNotifies(false);
+
+	_trackedDeviceListCharac->setValue(buffer);
+	_trackedDeviceListCharac->setMaxLength(_trackedDeviceList->getMaxLength());
+	_trackedDeviceListCharac->setDataLength(0);
+
+	// Load the nearby timeout
+	uint16_t counts;
+	Storage::getUint16(Settings::getInstance().getConfig().nearbyTimeout, counts, TRACKDEVICE_DEFAULT_TIMEOUT_COUNT);
+	_trackedDeviceList->setTimeout(counts);
+}
+
+void IndoorLocalizationService::writeTrackedDevices() {
+	buffer_ptr_t buffer;
+	uint16_t length;
+	_trackedDeviceList->getBuffer(buffer, length);
+	Storage::setArray(buffer, _storageStruct.trackedDevices.list, length);
+}
+
+void IndoorLocalizationService::readTrackedDevices() {
+	buffer_ptr_t buffer;
+	uint16_t length;
+	_trackedDeviceList->getBuffer(buffer, length);
+	length = _trackedDeviceList->getMaxLength();
+
+	Storage::getArray(_storageStruct.trackedDevices.list, buffer, (buffer_ptr_t)NULL, length);
+
+	if (!_trackedDeviceList->isEmpty()) {
+		LOGi("restored tracked devices (%d):", _trackedDeviceList->getSize());
+		_trackedDeviceList->print();
+
+		_trackedDeviceListCharac->setDataLength(_trackedDeviceList->getDataLength());
+		_trackedDeviceListCharac->notify();
+	}
+}
+
+void IndoorLocalizationService::setNearbyTimeout(uint16_t counts) {
+	if (_trackedDeviceList != NULL) {
+		_trackedDeviceList->setTimeout(counts);
+	}
+}
+
+uint16_t IndoorLocalizationService::getNearbyTimeout() {
+	if (_trackedDeviceList == NULL) {
+		return 0;
+	}
+	return _trackedDeviceList->getTimeout();
+}
+
+void IndoorLocalizationService::startTracking() {
+	if (!_trackMode) {
+		// Set to some value initially
+		_trackIsNearby = false;
+	}
+	_trackMode = true;
+	if (!getStack()->isScanning()) {
+		LOGi("Start tracking");
+		getStack()->startScanning();
+	}
+}
+
+void IndoorLocalizationService::stopTracking() {
+	_trackMode = false;
+	if (getStack()->isScanning()) {
+		LOGi("Stop tracking");
+		getStack()->stopScanning();
+	}
 }
 
 void IndoorLocalizationService::addTrackedDeviceCharacteristic() {
-	_trackedDeviceCharac = createCharacteristicRef<TrackedDevice>();
+
+	buffer_ptr_t buffer = MasterBuffer::getInstance().getBuffer();
+
+	_trackedDeviceCharac = new Characteristic<buffer_ptr_t>();
+	addCharacteristic(_trackedDeviceCharac);
+
 	_trackedDeviceCharac->setUUID(UUID(getUUID(), TRACKED_DEVICE_UUID));
 	_trackedDeviceCharac->setName("Add tracked device");
 	_trackedDeviceCharac->setWritable(true);
 	_trackedDeviceCharac->setNotifies(false);
-//	_trackedDeviceCharac->setDefaultValue();
-	_trackedDeviceCharac->onWrite([&](const TrackedDevice& value) -> void {
-		LOGi("Add tracked device");
-		value.print();
+	_trackedDeviceCharac->onWrite([&](const buffer_ptr_t& value) -> void {
+		TrackedDevice dev;
+		dev.assign(_trackedDeviceCharac->getValue(), _trackedDeviceCharac->getValueLength());
 
-		_trackedDeviceList->add(value.getAddress(), value.getRSSI());
-		*_trackedDeviceListCharac = *_trackedDeviceList;
-
-//		LOGi("RSSI threshold: %i", value.rssi_threshold);
-//		LOGi("Received value from [%02X %02X %02X %02X %02X %02X]", value.addr[5],
-//			value.addr[4], value.addr[3], value.addr[2], value.addr[1], value.addr[0]);
-
-		// Start scanning
-		if (!_stack->isScanning()) {
-			LOGi("Start tracking");
-			if (!_stack->isScanning()) {
-//				if (_trackedDeviceList != NULL) {
-//					_trackedDeviceList->init();
-//				}
-				_stack->startScanning();
-			}
-			_trackMode = true;
+		if (dev.getRSSI() > 0) {
+			LOGi("Remove tracked device");
+			dev.print();
+			_trackedDeviceList->rem(dev.getAddress());
 		} else {
-			LOGi("Stop tracking");
-			_stack->stopScanning();
-			_trackMode = false;
+			LOGi("Add tracked device");
+			dev.print();
+			_trackedDeviceList->add(dev.getAddress(), dev.getRSSI());
+		}
+		_trackedDeviceListCharac->setDataLength(_trackedDeviceList->getDataLength());
+		_trackedDeviceListCharac->notify();
+
+		LOGi("currently tracking devices:");
+		_trackedDeviceList->print();
+
+		// store in persistent memory
+		writeTrackedDevices();
+		savePersistentStorage();
+
+		if (_trackedDeviceList->getSize() > 0) {
+			startTracking();
+		}
+		else {
+			stopTracking();
 		}
 	});
-}
 
-IndoorLocalizationService& IndoorLocalizationService::createService(Nrf51822BluetoothStack& _stack) {
-	LOGd("Create indoor localisation service");
-	IndoorLocalizationService* svc = new IndoorLocalizationService(_stack);
-	_stack.addService(svc);
-	svc->addSpecificCharacteristics();
-	return *svc;
+	_trackedDeviceCharac->setValue(buffer);
+	_trackedDeviceCharac->setMaxLength(TRACKDEVICES_SERIALIZED_SIZE);
+	_trackedDeviceCharac->setDataLength(0);
+
 }
 
 void IndoorLocalizationService::on_ble_event(ble_evt_t * p_ble_evt) {
@@ -240,22 +400,27 @@ void IndoorLocalizationService::onRSSIChanged(int8_t rssi) {
 }
 
 void IndoorLocalizationService::setRSSILevel(int8_t RSSILevel) {
+#ifdef MICRO_VIEW
+	// Update rssi at the display
+	write("2 %i\r\n", RSSILevel);
+#endif
 	if (_rssiCharac) {
 		*_rssiCharac = RSSILevel;
 	}
 }
 
-void IndoorLocalizationService::setRSSILevelHandler(func_t func) {
-	_rssiHandler = func;
-}
+//void IndoorLocalizationService::setRSSILevelHandler(func_t func) {
+//	_rssiHandler = func;
+//}
 
 #if(SOFTDEVICE_SERIES != 110)
 void IndoorLocalizationService::onAdvertisement(ble_gap_evt_adv_report_t* p_adv_report) {
-	if (_stack->isScanning()) {
-		if (_scanResult != NULL) {
+	if (getStack()->isScanning()) {
+		if (_scanMode) {
+//			ScanResult& result = _peripheralCharac->getValue();
 			_scanResult->update(p_adv_report->peer_addr.addr, p_adv_report->rssi);
 		}
-		if (_trackedDeviceList != NULL) {
+		if (_trackMode && _trackedDeviceList != NULL) {
 			_trackedDeviceList->update(p_adv_report->peer_addr.addr, p_adv_report->rssi);
 		}
 	}

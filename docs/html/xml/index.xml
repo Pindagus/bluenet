@@ -3,8 +3,19 @@
   <brief>Bluenet, a mesh combined with Bluetooth Low-Energy.</brief>
   <doc># Bluenet Documentation
 
-This documentation describes the features of the Bluenet firmware.</doc>
+This documentation describes the features of the Bluenet firmware. If you are not on the http://dobots.github.io/bluenet/ page, you can navigate to it, to read this in your browser.
+
+# Bluenet Code
+
+The code for the firmware can be found at https://github.com/dobots/bluenet.
+
+# Crownstone
+
+The product that makes use of this firmware is the crownstone, which is currently one of the core technologies developed at DoBots. At the moment the status is just before launching our product, so as a development inclined person, you can see our work on github (and in this documentation) as a sneak preview.
+
+See: https://dobots.nl/products/crownstone/</doc>
   <namespace name="BLEpp" ref="BLEpp#BLEpp">
+    <brief> General BLE name service</brief>
     <class name="BatteryService" ref="BLEpp::BatteryService#BLEpp::BatteryService">
       <brief> Battery service</brief>
     </class>
@@ -12,31 +23,31 @@ This documentation describes the features of the Bluenet firmware.</doc>
       <brief> BLEStack defines a chip-agnostic Bluetooth Low-Energy stack</brief>
     </class>
     <classtemplate name="Characteristic" ref="BLEpp::Characteristic#BLEpp::Characteristic">
-      <brief> Characteristic of generic type T</brief>
-      <templatetypeparameter id="BLEpp::Characteristic::T" name="T" />
+      <brief> A default characteristic</brief>
+      <templatetypeparameter id="BLEpp::Characteristic::T" name="T">
+        <brief>type of the value</brief>
+      </templatetypeparameter>
+      <templatetypeparameter id="BLEpp::Characteristic::E" name="E">
+        <brief>default type (subdefined for example for built-in types)</brief>
+      </templatetypeparameter>
     </classtemplate>
+    <class name="Characteristic" ref="BLEpp::Characteristic#BLEpp::Characteristic">
+      <brief>A characteristic for strings</brief>
+    </class>
     <class name="CharacteristicBase" ref="BLEpp::CharacteristicBase#BLEpp::CharacteristicBase">
       <brief> Non-template base class for Characteristics.</brief>
     </class>
-    <struct name="CharacteristicInit" ref="BLEpp::CharacteristicInit#BLEpp::CharacteristicInit" />
-    <struct name="CharacteristicStatus" ref="BLEpp::CharacteristicStatus#BLEpp::CharacteristicStatus" />
-    <classtemplate name="CharacteristicT" ref="BLEpp::CharacteristicT#BLEpp::CharacteristicT">
-      <brief> A default characteristic</brief>
-      <templatetypeparameter id="BLEpp::CharacteristicT::T" name="T" />
-      <templatetypeparameter id="BLEpp::CharacteristicT::E" name="E" />
+    <classtemplate name="CharacteristicGeneric" ref="BLEpp::CharacteristicGeneric#BLEpp::CharacteristicGeneric">
+      <brief> Characteristic of generic type T</brief>
+      <templatetypeparameter id="BLEpp::CharacteristicGeneric::T" name="T">
+        <brief>Generic type T</brief>
+      </templatetypeparameter>
     </classtemplate>
-    <class name="CharacteristicT" ref="BLEpp::CharacteristicT#BLEpp::CharacteristicT">
-      <brief>A characteristic for strings</brief>
-    </class>
-    <class name="CharacteristicT" ref="BLEpp::CharacteristicT#BLEpp::CharacteristicT">
-      <brief>A characteristic for CharacteristicValue</brief>
-    </class>
-    <struct name="CharacteristicValue" ref="BLEpp::CharacteristicValue#BLEpp::CharacteristicValue">
-      <brief> A value which can be written to or read from a characteristic </brief>
+    <struct name="CharacteristicInit" ref="BLEpp::CharacteristicInit#BLEpp::CharacteristicInit">
+      <brief> CharacteristicInit collects fields required to define a BLE characteristic</brief>
     </struct>
-    <class name="GenericService" ref="BLEpp::GenericService#BLEpp::GenericService" />
-    <class name="IBeacon" ref="BLEpp::IBeacon#BLEpp::IBeacon">
-      <brief> Implementation of the iBeacon specification.</brief>
+    <class name="GenericService" ref="BLEpp::GenericService#BLEpp::GenericService">
+      <brief> Generic Service is a <ref ref="BLEpp::Service#BLEpp::Service">BLEpp::Service</ref> and <ref ref="BLEpp::Service#BLEpp::Service::Service">BLEpp::Service::Service</ref> with characteristics</brief>
     </class>
     <class name="Nrf51822BluetoothStack" ref="BLEpp::Nrf51822BluetoothStack#BLEpp::Nrf51822BluetoothStack">
       <brief> nRF51822 specific implementation of the BLEStack</brief>
@@ -44,18 +55,15 @@ This documentation describes the features of the Bluenet firmware.</doc>
     <class name="Service" ref="BLEpp::Service#BLEpp::Service">
       <brief> Service as defined in the GATT Specification.</brief>
     </class>
-    <class name="UUID" ref="BLEpp::UUID#BLEpp::UUID">
-      <brief> A Universally Unique IDentifier. </brief>
-    </class>
   </namespace>
   <class name="ADC" ref="ADC#ADC" />
-  <struct name="AllocatedBuffer" ref="AllocatedBuffer#AllocatedBuffer">
-    <brief>Dominik: DO NOT USE! malloc fails completely or doesn't return a correct memory on the heap!!!!</brief>
-  </struct>
   <classtemplate name="fixed_tuple" ref="fixed_tuple#fixed_tuple">
     <brief> A fixed tuple is a vector with a templated type and a reserved capacity.</brief>
-    <templatetypeparameter id="fixed_tuple::T" name="T" />
+    <templatetypeparameter id="fixed_tuple::T" name="T">
+      <brief>templated type which goes into the vector</brief>
+    </templatetypeparameter>
     <templatenontypeparameter id="fixed_tuple::capacity" name="capacity">
+      <brief>Predefined capacity of the underlying std::vector.</brief>
       <type name="uint8_t" />
     </templatenontypeparameter>
   </classtemplate>
@@ -63,33 +71,74 @@ This documentation describes the features of the Bluenet firmware.</doc>
     <brief> General Service for the Crownstone</brief>
   </class>
   <class name="IndoorLocalizationService" ref="IndoorLocalizationService#IndoorLocalizationService" />
-  <struct name="ISerializable" ref="ISerializable#ISerializable" />
+  <struct name="peripheral_device_list_t" ref="peripheral_device_list_t#peripheral_device_list_t">
+    <brief> Structure of the list of peripheral devices which is sent over Bluetooth</brief>
+  </struct>
+  <struct name="peripheral_device_t" ref="peripheral_device_t#peripheral_device_t">
+    <brief> Structure used to store peripheral devices detected during a scan.</brief>
+  </struct>
   <class name="PowerService" ref="PowerService#PowerService" />
+  <struct name="ps_general_service_t" ref="ps_general_service_t#ps_general_service_t">
+    <brief> Struct used by the <ref ref="GeneralService#GeneralService">GeneralService</ref> to store elements</brief>
+  </struct>
+  <struct name="ps_indoorlocalisation_service_t" ref="ps_indoorlocalisation_service_t#ps_indoorlocalisation_service_t">
+    <brief> Struct used by the &amp;lt;IndoorLocalisationService&amp;gt; to store elements</brief>
+    <struct name="(anonymous::1)" ref="ps_indoorlocalisation_service_t::(anonymous::1)#ps_indoorlocalisation_service_t::(anonymous::1)" />
+  </struct>
+  <struct name="ps_power_service_t" ref="ps_power_service_t#ps_power_service_t">
+    <brief> Struct used by the <ref ref="PowerService#PowerService">PowerService</ref> to store elements</brief>
+  </struct>
+  <struct name="ps_storage_base_t" ref="ps_storage_base_t#ps_storage_base_t">
+    <brief> Base class for storage structures</brief>
+  </struct>
   <class name="PWM" ref="PWM#PWM">
     <brief> Pulse Wide Modulation class</brief>
   </class>
   <struct name="pwm_config_t" ref="pwm_config_t#pwm_config_t">
     <brief> Pulse Wide Modulation struct</brief>
   </struct>
+  <class name="ScanResult" ref="ScanResult#ScanResult">
+    <brief> Result of a scan device operation</brief>
+  </class>
+  <class name="Storage" ref="Storage#Storage">
+    <brief> Class to store items persistently in FLASH</brief>
+  </class>
+  <struct name="storage_config_t" ref="storage_config_t#storage_config_t">
+    <brief> Storage configuration struct</brief>
+  </struct>
   <classtemplate name="tuple" ref="tuple#tuple">
     <brief> A tuple is a vector with a templated type and a public constructor.</brief>
-    <templatetypeparameter id="tuple::T" name="T" />
+    <templatetypeparameter id="tuple::T" name="T">
+      <brief>templated element which goes into the vector</brief>
+    </templatetypeparameter>
   </classtemplate>
   <enum anonymous="yes" id="(anonymous::1)" name="(anonymous::1)">
-    <enumvalue id="PWM_MODE_LED_100" name="PWM_MODE_LED_100" value="0">
-      <brief>0-100 resolution, 156 Hz PWM frequency, 32 kHz timer frequency (prescaler 9)</brief>
+    <enumvalue id="PWM_MODE_122" name="PWM_MODE_122" value="0">
+      <brief>122 Hz PWM</brief>
     </enumvalue>
-    <enumvalue id="PWM_MODE_LED_255" name="PWM_MODE_LED_255" value="1">
-      <brief>8-bit resolution, 122 Hz PWM frequency, 65 kHz timer frequency (prescaler 8)</brief>
+    <enumvalue id="PWM_MODE_244" name="PWM_MODE_244" value="1">
+      <brief>244 Hz PWM</brief>
     </enumvalue>
-    <enumvalue id="PWM_MODE_LED_1000" name="PWM_MODE_LED_1000" value="2">
-      <brief>0-1000 resolution, 125 Hz PWM frequency, 500 kHz timer frequency (prescaler 5)</brief>
+    <enumvalue id="PWM_MODE_976" name="PWM_MODE_976" value="2">
+      <brief>976 Hz PWM</brief>
     </enumvalue>
-    <enumvalue id="PWM_MODE_MTR_100" name="PWM_MODE_MTR_100" value="3">
-      <brief>0-100 resolution, 20 kHz PWM frequency, 4MHz timer frequency (prescaler 2)</brief>
+    <enumvalue id="PWM_MODE_15625" name="PWM_MODE_15625" value="3">
+      <brief>15625 Hz PWM</brief>
     </enumvalue>
-    <enumvalue id="PWM_MODE_MTR_255" name="PWM_MODE_MTR_255" value="4">
-      <brief>8-bit resolution, 31 kHz PWM frequency, 16MHz timer frequency (prescaler 0)</brief>
+    <enumvalue id="PWM_MODE_62500" name="PWM_MODE_62500" value="4">
+      <brief>62500 Hz PWM</brief>
+    </enumvalue>
+  </enum>
+  <enum anonymous="yes" id="ps_storage_id" name="ps_storage_id">
+    <brief> Enumeration used to identify the different storage structures</brief>
+    <enumvalue id="PS_ID_POWER_SERVICE" name="PS_ID_POWER_SERVICE" value="0">
+      <brief>storage for the power wervice</brief>
+    </enumvalue>
+    <enumvalue id="PS_ID_GENERAL_SERVICE" name="PS_ID_GENERAL_SERVICE" value="1">
+      <brief>storage for the general service</brief>
+    </enumvalue>
+    <enumvalue id="PS_ID_INDOORLOCALISATION_SERVICE" name="PS_ID_INDOORLOCALISATION_SERVICE" value="2">
+      <brief>storage for the indoor localisation service</brief>
     </enumvalue>
   </enum>
   <typedef id="pwm_mode_t" name="pwm_mode_t">
@@ -106,7 +155,7 @@ bits, etc.
     </return>
   </function>
   <function id="SWI1_IRQHandler" name="SWI1_IRQHandler">
-    <brief> Interrupt request for SoftDevice</brief>
+    <brief>Interrupt request for SoftDevice</brief>
     <return>
       <type builtin="yes" name="void" />
     </return>

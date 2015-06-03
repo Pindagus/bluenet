@@ -9,7 +9,7 @@
  * around 10240+2656+112 = 0x200032d0.
  * Then we have only around 1kB left for the stack!!!
  *********************************************************************************************************************/
-HEAP_SIZE = 3000;
+HEAP_SIZE = 2700;
 
 SECTIONS
 {
@@ -71,14 +71,14 @@ SECTIONS
 
 	.bss : {
 		. = ALIGN(4);
-		_sbss = .; 
+		_sbss = .;
 		PROVIDE (__bss_start__ = _sbss);
 		*(.shbss)
 		*(.bss* .gnu.linkonce.b.*)
 		*(COMMON)
 		*(.ram.b .bss.ram)
 		. = ALIGN(4);
-		_ebss = .;   
+		_ebss = .;
 		__bss_end__ = .;
 	} > RAM
 	end = .;

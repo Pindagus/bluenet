@@ -21,94 +21,132 @@
 // temporary defines
 #define MESHING_PARALLEL 1
 
-// currently does not compile(!)
-//#define IBEACON
-
-// if softdevice_handler.c is used, we cannot also define SWI2_IRQHandler but will need to set evt_schedule_func in the 
-// softdevice_handler_init call
-#define USE_DEFAULT_SOFTDEVICE_HANDLER
-
-//#define DEFAULT_ON
+//#define MICRO_VIEW 1
 
 #if __clang__
 #define STRINGIFY(str) #str
 #else
 #define STRINGIFY(str) str
 #endif
+
 /**********************************************************************************************************************
  * General includes
  *********************************************************************************************************************/
 
-#include "cs_BluetoothLE.h"
+#include <cs_Crownstone.h>
 
-#if(NORDIC_SDK_VERSION < 5)
-#include "ble_stack_handler.h"
-#include "ble_nrf6310_pins.h"
-#endif
-#include "nrf51_bitfields.h"
-
-extern "C" {
-#include "ble_advdata_parser.h"
-#include "nrf_delay.h"
-#include "app_scheduler.h"
-}
-
-#include "nordic_common.h"
-#include "cs_nRF51822.h"
-
-#include <stdbool.h>
-#include <stdint.h>
-#include <cstring>
-#include <cstdio>
-
-#include "common/cs_Boards.h"
-
-#if(BOARD==PCA10001)
-	#include "nrf_gpio.h"
-#endif
-
-#if MESHING==1
-#include <protocol/cs_Mesh.h>
-#endif
-
+#include "cfg/cs_Boards.h"
 #include "drivers/cs_RTC.h"
-#include "drivers/cs_ADC.h"
 #include "drivers/cs_PWM.h"
-#include "drivers/cs_LPComp.h"
-#include "drivers/cs_Serial.h"
-#include "common/cs_Storage.h"
+#include "util/cs_Utils.h"
+#include "drivers/cs_Timer.h"
+#include "structs/buffer/cs_MasterBuffer.h"
 
-#if INDOOR_SERVICE==1
-#include <services/cs_IndoorLocalisationService.h>
-#endif
-#if GENERAL_SERVICE==1
-#include <services/cs_GeneralService.h>
-#endif
-#if POWER_SERVICE==1
-#include <services/cs_PowerService.h>
+#if CHAR_MESHING==1
+#include <protocol/cs_Mesh.h>
+#include <drivers/cs_RNG.h>
+#include <third/protocol/led_config.h>
 #endif
 
-using namespace BLEpp;
+/**********************************************************************************************************************
+ * Custom includes
+ *********************************************************************************************************************/
+
+#include <cfg/cs_Settings.h>
+
+#include <events/cs_EventDispatcher.h>
+#include <events/cs_EventTypes.h>
 
 /**********************************************************************************************************************
  * Main functionality
  *********************************************************************************************************************/
 
+using namespace BLEpp;
+
+
+#if CHAR_MESHING==1
+
+/**********************************************************************************************************************
+ * Interlude for meshing. Will need to be integrated with the code!
+ *********************************************************************************************************************/
+
+extern "C" {
+
+#if BOARD==PCA10001
+/* configure button interrupt for evkits */
+static void gpiote_init(void)
+{
+  NRF_GPIO->PIN_CNF[BUTTON_0] = (GPIO_PIN_CNF_SENSE_Low << GPIO_PIN_CNF_SENSE_Pos)
+                | (GPIO_PIN_CNF_DRIVE_S0S1 << GPIO_PIN_CNF_DRIVE_Pos)
+        //         | (BUTTON_PULL << GPIO_PIN_CNF_PULL_Pos)
+                | (GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos)
+                | (GPIO_PIN_CNF_DIR_Input << GPIO_PIN_CNF_DIR_Pos);
+
+  NRF_GPIO->PIN_CNF[BUTTON_1] = (GPIO_PIN_CNF_SENSE_Low << GPIO_PIN_CNF_SENSE_Pos)
+                | (GPIO_PIN_CNF_DRIVE_S0S1 << GPIO_PIN_CNF_DRIVE_Pos)
+         //        | (BUTTON_PULL << GPIO_PIN_CNF_PULL_Pos)
+                | (GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos)
+                | (GPIO_PIN_CNF_DIR_Input << GPIO_PIN_CNF_DIR_Pos);
+
+
+  /* GPIOTE interrupt handler normally runs in STACK_LOW priority, need to put it
+  in APP_LOW in order to use the mesh API */
+  NVIC_SetPriority(GPIOTE_IRQn, 3);
+
+  NVIC_EnableIRQ(GPIOTE_IRQn);
+  NRF_GPIOTE->INTENSET = GPIOTE_INTENSET_PORT_Msk;
+}
+
+RNG rng;
+
+void GPIOTE_IRQHandler(void)
+{
+#ifdef STOP_ADV
+	Nrf51822BluetoothStack &stack = Nrf51822BluetoothStack::getInstance();
+
+	if (stack.isAdvertising()) {
+		LOGi("Stop advertising");
+		stack.stopAdvertising();
+	}
+#endif
+ 	CMesh & mesh = CMesh::getInstance();
+	NRF_GPIOTE->EVENTS_PORT = 0;
+	for (uint8_t i = 0; i < 2; ++i)
+	{
+		if (NRF_GPIO->IN & (1 << (BUTTON_0 + i)))
+		{
+			LOGi("Button %i pressed", i);
+			uint32_t value = mesh.receive(i+1);
+//			value = 1 - value;
+			value = rng.getRandom8();
+//			led_config(i + 1, value);
+			LOGi("1");
+			mesh.send(i + 1, value);
+		}
+	}
+}
+
+#endif
+
+} // extern "C"
+
+#endif // CHAR_MESHING == 1
+
+
 /**
  * If UART is enabled this will be the message printed out over a serial connection. Connectors are expensive, so UART
  * is not available in the final product.
  */
-void welcome() {
+void Crownstone::welcome() {
 	nrf_gpio_cfg_output(PIN_GPIO_LED0);
 	nrf_gpio_pin_set(PIN_GPIO_LED0);
 	config_uart();
 	_log(INFO, "\r\n");
-	uint8_t *p = (uint8_t*)malloc(1);
-	LOGd("Start of heap %p", p);
-	free(p);
+	BLEutil::print_heap("Heap init");
+	BLEutil::print_stack("Stack init");
 	LOGd("Bootloader starts at 0x00034000.");
         // To have DFU, keep application limited to (BOOTLOADER_START - APPLICATION_START_CODE) / 2
-	// For (0x35000 - 0x16000)/2 this is 0xF800, so from 0x16000 to 0x25800 
+	// For (0x35000 - 0x16000)/2 this is 0xF800, so from 0x16000 to 0x25800
 	// Very probably FLASH (32MB) is not a problem though, but RAM will be (16kB)!
 	LOGi("Welcome at the nRF51822 code for meshing.");
 	LOGi("Compilation date: %s", STRINGIFY(COMPILATION_TIME));
@@ -118,19 +156,27 @@ void welcome() {
 /**
  * The default name. This can later be altered by the user if the corresponding service and characteristic is enabled.
  */
-void setName(Nrf51822BluetoothStack &stack) {
+void Crownstone::setName() {
+	// assemble default name from BLUETOOTH_NAME and COMPILATION_TIME
 	char devicename[32];
 	sprintf(devicename, "%s_%s", STRINGIFY(BLUETOOTH_NAME), STRINGIFY(COMPILATION_TIME));
-	LOGi("Set name to %s", STRINGIFY(BLUETOOTH_NAME));
-	stack.setDeviceName(std::string(devicename)) // max len = ble_gap_devname_max_len (31)
-		.setAppearance(BLE_APPEARANCE_GENERIC_TAG);
+	// check config (storage) if another name was stored
+	std::string device_name;
+	// use default name in case no stored name is found
+	Storage::getString(Settings::getInstance().getConfig().device_name, device_name, std::string(devicename));
+	// assign name
+	LOGi("Set name to %s", device_name.c_str());
+	_stack->updateDeviceName(device_name); // max len = ble_gap_devname_max_len (31)
+	_stack->updateAppearance(BLE_APPEARANCE_GENERIC_TAG);
 }
 
 /* Sets default parameters of the Bluetooth connection.
  *
+ * Data is transmitted with +4 dBm.
+ *
  * On transmission of data within a connection
- *   - minimum connection interval (in steps of 1.25 ms, 16*1.25 = 10 ms)
- *   - maximum connection interval (in steps of 1.25 ms, 32*1.25 = 20 ms)
+ *   - minimum connection interval (in steps of 1.25 ms, 16*1.25 = 20 ms)
+ *   - maximum connection interval (in steps of 1.25 ms, 32*1.25 = 40 ms)
  * The supervision timeout multiplier is 400
  * The slave latency is 10
  * On advertising:
@@ -139,216 +185,157 @@ void setName(Nrf51822BluetoothStack &stack) {
  *
  * There is no whitelist defined, nor peer addresses.
  */
-void configure(Nrf51822BluetoothStack &stack) {
-	stack.setTxPowerLevel(-4)
-		.setMinConnectionInterval(16)
-		.setMaxConnectionInterval(32)
-		.setConnectionSupervisionTimeout(400)
-		.setSlaveLatency(10)
-		.setAdvertisingInterval(1600)
-		.setAdvertisingTimeoutSeconds(0);
+void Crownstone::configStack() {
+	_stack->setTxPowerLevel(+4);
+	_stack->setMinConnectionInterval(16);
+	_stack->setMaxConnectionInterval(32);
+	_stack->setConnectionSupervisionTimeout(400);
+	_stack->setSlaveLatency(10);
+	_stack->setAdvertisingInterval(80);
+	_stack->setAdvertisingTimeoutSeconds(0);
 }
 
 /**
  * This must be called after the SoftDevice has started.
  */
-void config_drivers() {
-	// TODO: Dominik, can we connect the adc init call with the characteristic / services
-	//   that actually use it? if there is no service that uses it there is no reason to
-	//   allocate space for it
-//	ADC::getInstance().init(PIN_AIN_ADC); // Moved to PowerService.cpp
-
-	pwm_config_t pwm_config = PWM_DEFAULT_CONFIG;
+void Crownstone::configDrivers() {
+	pwm_config_t pwm_config;
 	pwm_config.num_channels = 1;
 	pwm_config.gpio_pin[0] = PIN_GPIO_SWITCH;
 	pwm_config.mode = PWM_MODE_976;
 
 	PWM::getInstance().init(&pwm_config);
 
-#if(BOARD==PCA10001)
+#if BOARD==PCA10001 || BOARD==PCA10000
 	nrf_gpio_cfg_output(PIN_GPIO_LED_CON);
 #endif
 }
 
-#if MESHING==1
-
-/**********************************************************************************************************************
- * Interlude for meshing. Will need to be integrated with the code!
- *********************************************************************************************************************/
-
-extern "C" {
-
-/**
- * @brief Softdevice event handler
- *
- * Currently this interrupt screws up the main program. So apparently we have to set priorities somewhere or to tell
- * the program that it is entering a protected region or something like that.
- */               
-#ifndef USE_DEFAULT_SOFTDEVICE_HANDLER
-void SD_EVT_IRQHandler(void)
-{   
-	// do not print in IRQ handler, use LEDs if you have to
-//	LOGd("Received SoftDevice event, call rbc_mesh_sd_irq_handler.");
-	rbc_mesh_sd_irq_handler(); 
-} 
-#endif
-
-#ifdef BOARD_PCA10001             
-/* configure button interrupt for evkits */                    
-static void gpiote_init(void)                       
-{                              
-  NRF_GPIO->PIN_CNF[BUTTON_0] = (GPIO_PIN_CNF_SENSE_Low << GPIO_PIN_CNF_SENSE_Pos)                  
-                | (GPIO_PIN_CNF_DRIVE_S0S1 << GPIO_PIN_CNF_DRIVE_Pos)                  
-        //         | (BUTTON_PULL << GPIO_PIN_CNF_PULL_Pos)                        
-                | (GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos)                
-                | (GPIO_PIN_CNF_DIR_Input << GPIO_PIN_CNF_DIR_Pos);                   
-                                                            
-  NRF_GPIO->PIN_CNF[BUTTON_1] = (GPIO_PIN_CNF_SENSE_Low << GPIO_PIN_CNF_SENSE_Pos)                  
-                | (GPIO_PIN_CNF_DRIVE_S0S1 << GPIO_PIN_CNF_DRIVE_Pos)                  
-         //        | (BUTTON_PULL << GPIO_PIN_CNF_PULL_Pos)                        
-                | (GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos)                
-                | (GPIO_PIN_CNF_DIR_Input << GPIO_PIN_CNF_DIR_Pos);                   
-                                                            
-                                                            
-  /* GPIOTE interrupt handler normally runs in STACK_LOW priority, need to put it                   
-  in APP_LOW in order to use the mesh API */                                     
-  NVIC_SetPriority(GPIOTE_IRQn, 3);                                          
-                                                            
-  NVIC_EnableIRQ(GPIOTE_IRQn);                                            
-  NRF_GPIOTE->INTENSET = GPIOTE_INTENSET_PORT_Msk;                                  
-}                                                            
-                              
-void GPIOTE_IRQHandler(void)
-{
-#ifdef STOP_ADV
-	Nrf51822BluetoothStack &stack = Nrf51822BluetoothStack::getInstance();
-	
-	if (stack.isAdvertising()) {
-		LOGi("Stop advertising");
-		stack.stopAdvertising();
-	}
-#endif
- 	CMesh & mesh = CMesh::getInstance();
-	NRF_GPIOTE->EVENTS_PORT = 0; 
-	for (uint8_t i = 0; i < 2; ++i) 
-	{
-		if (NRF_GPIO->IN & (1 << (BUTTON_0 + i)))
-		{
-			LOGi("Button %i pressed", i);
-			uint32_t value = mesh.receive(i+1);
-			value = 1 - value;
-			led_config(i + 1, value);
-			mesh.send(i + 1, value);
-		} 
-	} 
-}
-
-#endif // nRF6310
-
-} // extern "C"
-
-#endif // MESHING == 1
-
-/**********************************************************************************************************************
- * The main function. Note that this is not the first function called! For starters, if there is a bootloader present,
- * the code within the bootloader has been processed before. But also after the bootloader, the code in 
- * nRF51822.c will set event handlers and other stuff (such as coping with product anomalies, PAN), before calling 
- * main. If you enable a new peripheral device, make sure you enable the corresponding event handler there as well.
- *********************************************************************************************************************/
-
-int main() {
-	welcome();
-
-	// set up the bluetooth stack that controls the hardware.
-	Nrf51822BluetoothStack &stack = Nrf51822BluetoothStack::getInstance();
-
-	// set advertising parameters such as the device name and appearance.  
-	setName(stack);
-
-	// configure parameters for the Bluetooth stack
-	configure(stack);
-
-	// start up the softdevice early because we need it's functions to configure devices it ultimately controls.
-	// in particular we need it to set interrupt priorities.
-	stack.init();
-
-	stack.onConnect([&](uint16_t conn_handle) {
-			LOGi("onConnect...");
-			// todo this signature needs to change
-			//NRF51_GPIO_OUTSET = 1 << PIN_LED;
-			// first stop, see https://devzone.nordicsemi.com/index.php/about-rssi-of-ble
-			// be neater about it... we do not need to stop, only after a disconnect we do...
-			sd_ble_gap_rssi_stop(conn_handle);
-			sd_ble_gap_rssi_start(conn_handle);
-
-#if(BOARD==PCA10001)
-			nrf_gpio_pin_set(PIN_GPIO_LED_CON);
-#endif
-		})
-		.onDisconnect([&](uint16_t conn_handle) {
-			LOGi("onDisconnect...");
-			//NRF51_GPIO_OUTCLR = 1 << PIN_LED;
-
-			// of course this is not nice, but dirty! we immediately start advertising automatically after being
-			// disconnected. but for now this will be the default behaviour.
-
-#if(BOARD==PCA10001)
-			nrf_gpio_pin_clear(PIN_GPIO_LED_CON);
-#endif
-
-			stack.stopScanning();
-
-#ifdef IBEACON
-			stack.startIBeacon();
-#else
-			stack.startAdvertising();
-#endif
-		});
-
-	// Create ADC object
-	// TODO: make service which enables other services and only init ADC when necessary
-	//	ADC::getInstance();
-	//	LPComp::getInstance();
-
-	// Scheduler must be initialized before persistent memory
-	const uint16_t max_size = 32;
-	const uint16_t queue_size = 4;
-	APP_SCHED_INIT(max_size, queue_size);
-
-	// Create persistent memory object
-	// TODO: make service which enables other services and only init persistent memory when necessary
-	//	Storage::getInstance().init(32);
-
-	//	RealTimeClock::getInstance();
-
+void Crownstone::createServices() {
 	LOGi("Create all services");
-
-#if INDOOR_SERVICE==1
-	// now, build up the services and characteristics.
-	IndoorLocalizationService& localizationService = IndoorLocalizationService::createService(stack);
-#endif
 
 #if GENERAL_SERVICE==1
 	// general services, such as internal temperature, setting names, etc.
-	GeneralService& generalService = GeneralService::createService(stack);
+	_generalService = new GeneralService;
+	_stack->addService(_generalService);
+#endif
+
+#if INDOOR_SERVICE==1
+	// now, build up the services and characteristics.
+	_localizationService = new IndoorLocalizationService;
+	_stack->addService(_localizationService);
 #endif
 
 #if POWER_SERVICE==1
-	PowerService &powerService = PowerService::createService(stack);
+	_powerService = new PowerService;
+	_stack->addService(_powerService);
+#endif
+
+}
+
+void Crownstone::setup() {
+	welcome();
+
+	MasterBuffer::getInstance().alloc(MASTER_BUFFER_SIZE);
+
+	EventDispatcher::getInstance().addListener(this);
+
+	LOGi("Create Timer");
+	Timer::getInstance();
+
+	// set up the bluetooth stack that controls the hardware.
+	_stack = &Nrf51822BluetoothStack::getInstance();
+
+	// configure parameters for the Bluetooth stack
+	configStack();
+
+	// start up the softdevice early because we need it's functions to configure devices it ultimately controls.
+	// in particular we need it to set interrupt priorities.
+	_stack->init();
+
+#if IBEACON==1
+	// if enabled, create the iBeacon parameter object which will be used
+	// to start advertisement as an iBeacon
+
+	// get values from config
+	uint16_t major, minor;
+	uint8_t rssi;
+	ble_uuid128_t uuid;
+
+	ps_configuration_t cfg = Settings::getInstance().getConfig();
+	Storage::getUint16(cfg.beacon.major, major, BEACON_MAJOR);
+	Storage::getUint16(cfg.beacon.minor, minor, BEACON_MINOR);
+	Storage::getArray(cfg.beacon.uuid.uuid128, uuid.uuid128, ((ble_uuid128_t)UUID(BEACON_UUID)).uuid128, 16);
+	Storage::getUint8(cfg.beacon.rssi, rssi, BEACON_RSSI);
+
+	// create ibeacon object
+	_beacon = new IBeacon(uuid, major, minor, rssi);
+#endif
+
+	// set advertising parameters such as the device name and appearance.
+	// Note: has to be called after _stack->init or Storage is initialized too early and won't work correctly
+	setName();
+
+	_stack->onConnect([&](uint16_t conn_handle) {
+		LOGi("onConnect...");
+		// todo this signature needs to change
+		//NRF51_GPIO_OUTSET = 1 << PIN_LED;
+		// first stop, see https://devzone.nordicsemi.com/index.php/about-rssi-of-ble
+		// be neater about it... we do not need to stop, only after a disconnect we do...
+		sd_ble_gap_rssi_stop(conn_handle);
+		sd_ble_gap_rssi_start(conn_handle);
+
+#if BOARD==PCA10001 || BOARD==PCA10000
+		nrf_gpio_pin_set(PIN_GPIO_LED_CON);
+#endif
+	});
+	_stack->onDisconnect([&](uint16_t conn_handle) {
+		LOGi("onDisconnect...");
+		//NRF51_GPIO_OUTCLR = 1 << PIN_LED;
+
+		// of course this is not nice, but dirty! we immediately start advertising automatically after being
+		// disconnected. but for now this will be the default behaviour.
+
+#if BOARD==PCA10001 || BOARD==PCA10000
+		nrf_gpio_pin_clear(PIN_GPIO_LED_CON);
+#endif
+
+		bool wasScanning = _stack->isScanning();
+		_stack->stopScanning();
+
+#if IBEACON==1
+		_stack->startIBeacon(_beacon);
+#else
+		_stack->startAdvertising();
+#endif
+
+		if (wasScanning)
+			_stack->startScanning();
+
+	});
+
+	createServices();
+
+#if BOARD==CROWNSTONE_SENSOR
+	_sensors = new Sensors;
 #endif
 
 	// configure drivers
-	config_drivers();
+	configDrivers();
+	BLEutil::print_heap("Heap drivers: ");
+	BLEutil::print_stack("Stack drivers: ");
 
 	// begin sending advertising packets over the air.
-#ifdef IBEACON
-	stack.startIBeacon();
+#if IBEACON==1
+	_stack->startIBeacon(_beacon);
 #else
-	stack.startAdvertising();
+	_stack->startAdvertising();
 #endif
+	BLEutil::print_heap("Heap adv: ");
+	BLEutil::print_stack("Stack adv: ");
 
-#if MESHING==1
-    #ifdef BOARD_PCA10001
+#if CHAR_MESHING==1
+	#if BOARD==PCA10001
         gpiote_init();
     #endif
 
@@ -357,38 +344,86 @@ int main() {
     #endif
 #endif
 
-#if MESHING==1
+#if CHAR_MESHING==1
  	CMesh & mesh = CMesh::getInstance();
 	mesh.init();
 #endif
-#if POWER_SERVICE==1
-#ifdef DEFAULT_ON
+
+#if (POWER_SERVICE==1) and (DEFAULT_ON==1)
 	LOGi("Set power ON by default");
 	nrf_delay_ms(1000);
-	powerService.turnOn();
+	_powerService->turnOn();
 #else
 	LOGi("Set power OFF by default");
 #endif
+
+}
+
+void Crownstone::run() {
+
+	_stack->startTicking();
+
+#if (BOARD==CROWNSTONE_SENSOR)
+		_sensors->startTicking();
 #endif
-	LOGi("Running while ticking..");
-	//static long int dbg_counter = 0;
+
 	while(1) {
-		//LOGd("Tick %li", ++dbg_counter); // we really have to monitor the frequency of our ticks
-		
-		// The stack tick will halt everything until there is a connection made...
-		stack.tick();
-#if GENERAL_SERVICE==1
-		generalService.tick();
-#endif
-#if POWER_SERVICE==1
-		powerService.tick();
-#endif
-#if INDOOR_SERVICE==1
-		localizationService.tick();
-#endif
 
 		app_sched_execute();
 
-		nrf_delay_ms(50);
+#if(NORDIC_SDK_VERSION > 5)
+	BLE_CALL(sd_app_evt_wait, ());
+#else
+	BLE_CALL(sd_app_event_wait, () );
+#endif
+
 	}
+}
+
+void Crownstone::handleEvent(uint16_t evt, void* p_data, uint16_t length) {
+	LOGi("handleEvent: %d", evt);
+	switch(evt) {
+#if IBEACON==1
+	case CONFIG_IBEACON_MAJOR: {
+		_beacon->setMajor(*(uint32_t*)p_data);
+		break;
+	}
+	case CONFIG_IBEACON_MINOR: {
+		_beacon->setMinor(*(uint32_t*)p_data);
+		break;
+	}
+	case CONFIG_IBEACON_UUID: {
+		_beacon->setUUID(*(ble_uuid128_t*)p_data);
+		break;
+	}
+	case CONFIG_IBEACON_RSSI: {
+		_beacon->setRSSI(*(int8_t*)p_data);
+		break;
+	}
+#endif
+	}
+}
+
+void on_exit(void) {
+	LOGi("PROGRAM TERMINATED");
+}
+
+/**********************************************************************************************************************
+ * The main function. Note that this is not the first function called! For starters, if there is a bootloader present,
+ * the code within the bootloader has been processed before. But also after the bootloader, the code in
+ * cs_sysNrf51.c will set event handlers and other stuff (such as coping with product anomalies, PAN), before calling
+ * main. If you enable a new peripheral device, make sure you enable the corresponding event handler there as well.
+ *********************************************************************************************************************/
+
+int main() {
+	atexit(on_exit);
+
+	Crownstone crownstone;
+
+	// setup crownstone ...
+	crownstone.setup();
+
+	// run forever ...
+	crownstone.run();
+
 }

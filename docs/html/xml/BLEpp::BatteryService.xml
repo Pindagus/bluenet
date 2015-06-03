@@ -6,6 +6,7 @@
 </doc>
   <base access="public">
     <type name="GenericService" ref="BLEpp::GenericService#BLEpp::GenericService" />
+    <brief> Generic Service is a <ref ref="BLEpp::Service#BLEpp::Service">BLEpp::Service</ref> and <ref ref="BLEpp::Service#BLEpp::Service::Service">BLEpp::Service::Service</ref> with characteristics</brief>
   </base>
   <typedef id="BLEpp::BatteryService::func_t" name="func_t">
     <brief>Define func_t as a templated function with an unsigned byte</brief>
@@ -41,7 +42,7 @@ the main line. This function writes to the characteristic to show it to the user
   </method>
   <field access="protected" id="BLEpp::BatteryService::_characteristic" name="_characteristic">
     <brief>A single characteristic with an unsigned 8-bit value</brief>
-    <type name="CharacteristicT&lt;unsigned char, void&gt;" qualifier="*" />
+    <type name="Characteristic&lt;unsigned char, void&gt;" qualifier="*" />
   </field>
   <field access="protected" id="BLEpp::BatteryService::_func" name="_func">
     <brief>A function for callback, not in use</brief>
